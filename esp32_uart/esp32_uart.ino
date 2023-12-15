@@ -1,16 +1,20 @@
 // Include the required libraries
 #include <WiFi.h>
 #include <AdafruitIO_WiFi.h>
-// #include <Arduino_FreeRTOS.h>
 #include <HardwareSerial.h>
+#include "DHT.h"
 
 // Define the UART pins
-#define WIFI_SSID "llapttop"
-#define WIFI_PASS "12344321"
+#define WIFI_SSID "NamPhu"
+#define WIFI_PASS "11032002"
 #define IO_USERNAME "lexuanbach"
-#define IO_KEY "aio_yUqT04A8xmes8L3ycQY3hjHdXM2a"
+#define IO_KEY "aio_ljDF89cmvjQg0yuyp2MATUAdXtuu"
 #define RX_PIN 16
 #define TX_PIN 17
+#define DHTPIN 2
+#define DHTTYPE DHT11
+
+DHT dht(DHTPIN, DHTTYPE);
 
 // Create an instance of the AdafruitIO_WiFi class
 AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
@@ -19,33 +23,29 @@ AdafruitIO_WiFi io(IO_USERNAME, IO_KEY, WIFI_SSID, WIFI_PASS);
 AdafruitIO_Feed *temp = io.feed("project-iot.temperature");
 AdafruitIO_Feed *humi = io.feed("project-iot.humidity");
 AdafruitIO_Feed *fan = io.feed("project-iot.fan");
+AdafruitIO_Feed *autofan = io.feed("project-iot.auto");
+AdafruitIO_Feed *status = io.feed("project-iot.status");
 
 // Create a Serial object
 HardwareSerial SerialUART(1);
 
 String DataToMicro = "0";
+String prevDataToMicro = "0";
+String test = "0";
+String fanstt = "0";
+String autofanstt = "0";
+String ctrlocal = "0";
 
-void handleMessage(AdafruitIO_Data *data) {
-  Serial.print("received <- ");
+void handleMessagefan(AdafruitIO_Data *data) {
+  Serial.print("Received fan from ada <- ");
   Serial.println(data->value());
-  DataToMicro = String(data->value());
+  fanstt = String(data->value());
 }
 
-String store[4];
-
-void separate (String strori, String *strs)
-{
-  int splitcount = 0;
-  while (strori.length() > 0){
-    int index = strori.indexOf('#');
-    if (index == -1){
-      strs[splitcount++] = strori;
-      break;
-    }else{
-      strs[splitcount++] = strori.substring(0, index);
-      strori = strori.substring(index + 1);
-    }
-  }
+void handleMessageauto(AdafruitIO_Data *data) {
+  Serial.print("Received autofan from ada <- ");
+  Serial.println(data->value());
+  autofanstt = String(data->value());
 }
 
 void ReceiveFromAda( void *pvParameters );
@@ -56,7 +56,6 @@ void ReceiveFromAda(void *pvParameters){
   for (;;) {
     io.run();
     // Send data via UART
-
   }
 }
 
@@ -67,16 +66,32 @@ void SendToAda(void *pvParameters){
     // Receive data via UART
     if (SerialUART.available() > 0) {
       String receivedData = SerialUART.readStringUntil('\r');
-      separate(receivedData, store);
-      Serial.println("Received: " + receivedData);
+      Serial.println("Received from microbit: " + receivedData);
+      if(receivedData == "1"){
+        Serial.println("The fan is turned on.");
+      }else{
+        Serial.println("The fan is turned off.");
+      }
+      status->save(receivedData.toInt());
     }
 
-    float tempValue = random(20, 30);
-    float humiValue = random(50, 60);
+    float h = dht.readHumidity();
+    float t = dht.readTemperature();
+    Serial.print("Current humidity: ");
+    Serial.println(h);
+    Serial.print("Current temperature: ");
+    Serial.println(t);
 
-    // Send the temperature value to Adafruit IO
-    temp->save(tempValue);
-    humi->save(humiValue);
+    // Set condition to auto control fan
+    if(t > 25 || h > 60){
+      ctrlocal = "1";
+    }else{
+      ctrlocal = "0";
+    }
+  
+    // Send the value to Adafruit IO
+    temp->save(t);
+    humi->save(h);
     delay(10000);
   }
 }
@@ -97,7 +112,8 @@ void setup() {
   io.connect();
 
   // Message handler
-  fan->onMessage(handleMessage);
+  fan->onMessage(handleMessagefan);
+  autofan->onMessage(handleMessageauto);
 
   // Wait for connection
   while(io.status() < AIO_CONNECTED) {
@@ -106,8 +122,10 @@ void setup() {
   }
   Serial.println("Connected to Adafruit IO");
 
+  dht.begin();
+
   // Configure UART
-  SerialUART.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
+  SerialUART.begin(115200, SERIAL_8N1, RX_PIN, TX_PIN);
 
   // Set up tasks to run independently.
   xTaskCreate(
@@ -127,12 +145,41 @@ void setup() {
     ,  NULL );
 
   // Other setup code...
+  autofan->get();
+  fan->get();
+  if(autofanstt == "0"){
+    DataToMicro = fanstt;
+    if(DataToMicro != prevDataToMicro){
+      prevDataToMicro = DataToMicro;
+      SerialUART.println(DataToMicro);
+      Serial.println("Sended to microbit:" + DataToMicro);
+    }
+  }else{
+    DataToMicro = ctrlocal;
+    if(DataToMicro != prevDataToMicro){
+      prevDataToMicro = DataToMicro;
+      SerialUART.println(DataToMicro);     
+      Serial.println("Sended to microbit:" + DataToMicro);
+    }
+  }
 }
 
 void loop() {
-  SerialUART.println(DataToMicro + "\n");
-  Serial.println("Sended");
-  Serial.println(DataToMicro);
-  delay(2000);
+
+  if(autofanstt == "0"){
+    DataToMicro = fanstt;
+    if(DataToMicro != prevDataToMicro){
+      prevDataToMicro = DataToMicro;
+      SerialUART.println(DataToMicro);
+      Serial.println("Sended to microbit: " + DataToMicro);
+    }
+  }else{
+    DataToMicro = ctrlocal;
+    if(DataToMicro != prevDataToMicro){
+      prevDataToMicro = DataToMicro;
+      SerialUART.println(DataToMicro);
+      Serial.println("Sended to microbit: " + DataToMicro);
+    }
+  }
   // Other loop code...
 }
