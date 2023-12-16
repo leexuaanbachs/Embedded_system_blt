@@ -4,13 +4,15 @@
 #include <HardwareSerial.h>
 #include "DHT.h"
 
-// Define the UART pins
+// Define wifi and io config
 #define WIFI_SSID "NamPhu"
 #define WIFI_PASS "11032002"
 #define IO_USERNAME "lexuanbach"
 #define IO_KEY "aio_ljDF89cmvjQg0yuyp2MATUAdXtuu"
+// Define the UART pins
 #define RX_PIN 16
 #define TX_PIN 17
+// Define DHT11
 #define DHTPIN 2
 #define DHTTYPE DHT11
 
@@ -31,7 +33,6 @@ HardwareSerial SerialUART(1);
 
 String DataToMicro = "0";
 String prevDataToMicro = "0";
-String test = "0";
 String fanstt = "0";
 String autofanstt = "0";
 String ctrlocal = "0";
@@ -55,7 +56,6 @@ void ReceiveFromAda(void *pvParameters){
   (void) pvParameters;
   for (;;) {
     io.run();
-    // Send data via UART
   }
 }
 
@@ -74,7 +74,7 @@ void SendToAda(void *pvParameters){
       }
       status->save(receivedData.toInt());
     }
-
+    // Get environment data from dht11 sensor
     float h = dht.readHumidity();
     float t = dht.readTemperature();
     Serial.print("Current humidity: ");
@@ -151,6 +151,7 @@ void setup() {
     DataToMicro = fanstt;
     if(DataToMicro != prevDataToMicro){
       prevDataToMicro = DataToMicro;
+      // Send data via UART
       SerialUART.println(DataToMicro);
       Serial.println("Sended to microbit:" + DataToMicro);
     }
@@ -158,6 +159,7 @@ void setup() {
     DataToMicro = ctrlocal;
     if(DataToMicro != prevDataToMicro){
       prevDataToMicro = DataToMicro;
+      // Send data via UART
       SerialUART.println(DataToMicro);     
       Serial.println("Sended to microbit:" + DataToMicro);
     }
@@ -170,6 +172,7 @@ void loop() {
     DataToMicro = fanstt;
     if(DataToMicro != prevDataToMicro){
       prevDataToMicro = DataToMicro;
+      // Send data via UART
       SerialUART.println(DataToMicro);
       Serial.println("Sended to microbit: " + DataToMicro);
     }
@@ -177,6 +180,7 @@ void loop() {
     DataToMicro = ctrlocal;
     if(DataToMicro != prevDataToMicro){
       prevDataToMicro = DataToMicro;
+      // Send data via UART
       SerialUART.println(DataToMicro);
       Serial.println("Sended to microbit: " + DataToMicro);
     }
